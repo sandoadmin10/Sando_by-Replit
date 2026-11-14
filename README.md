@@ -1,0 +1,126 @@
+# SANDO — ساندو
+
+**مساحة عمل تفهمك · A workspace that understands you.**
+
+An interactive, bilingual (Arabic RTL / English LTR) demonstration of an adaptive AI workspace.
+React + Vite + TypeScript + Tailwind CSS v4 + Motion, with a zero-dependency Node server that
+serves the app and proxies AI calls. It runs fully **without any API key** (Demo Mode).
+
+## Run it
+
+```bash
+npm install
+npm run build
+npm start          # http://localhost:3000  (uses $PORT when set, binds 0.0.0.0)
+```
+
+Development with hot reload:
+
+```bash
+npm run dev          # Vite on :5173
+npm run dev:server   # optional, second terminal: AI/API server on :3001 (Vite proxies /api to it)
+```
+
+Other scripts: `npm run typecheck`, `npm run preview` (build + start).
+
+## GitHub → Replit
+
+1. Push this folder to a GitHub repository (`git init && git add . && git commit -m "SANDO" && git push`).
+2. In Replit: **Create App → Import from GitHub**, pick the repository.
+3. Press **Run**. The included `.replit` runs `npm install && npm run build && npm start`.
+4. Optional, for Live AI: open **Secrets** and add the variables below, then press Run again.
+
+No Replit AI Agent or paid add-on is needed. The server reads `PORT` from the environment, binds
+`0.0.0.0`, serves `dist/`, falls back to `index.html` for client routes (refresh-safe), and exposes
+`/api/status` and `/api/ai` on the same origin — there are no hardcoded localhost URLs in production.
+
+## Environment variables (all optional)
+
+| Variable | Purpose |
+| --- | --- |
+| `ANTHROPIC_API_KEY` | Enables Live AI through the Anthropic Messages API |
+| `OPENAI_API_KEY` | Enables Live AI through the OpenAI Chat Completions API |
+| `AI_PROVIDER` | `anthropic` or `openai`. Auto-detected from whichever key is set |
+| `AI_MODEL` | Model id. Defaults: `claude-sonnet-5-5` / `gpt-4o-mini` |
+| `BRAVE_API_KEY` | Optional: enables the Professional Marketer's `search_web` tool |
+| `PORT` | Server port (default 3000) |
+
+Keys are read only by `server/index.js` and are never sent to the browser.
+
+### Sign-in instead of an API key (`AI_PROVIDER=claude-code`)
+
+The server can run the agent through the Claude Code CLI, which uses your Claude sign-in rather than an API key:
+
+```bash
+npm install -g @anthropic-ai/claude-code
+claude                # sign in once, then exit
+AI_PROVIDER=claude-code npm start
+```
+
+On a host with no browser, run `claude setup-token` on your own machine and set the result as
+`CLAUDE_CODE_OAUTH_TOKEN`. Each request spawns `claude -p` with all tools disabled. This is meant for your
+own use and for presenting the demo; a product offered to other people should use an API key.
+
+## Two explicit AI states
+
+- **Demo Mode** (no key): the assistant and generators use deterministic, prepared workflows from
+  `src/tools/demo.ts`. Every such output is labelled as a demo sample in the interface.
+- **Live AI** (key configured): the same buttons call `/api/ai`. The server accepts three validated
+  tasks only (`content`, `quiz`, `agent`), enforces a 32 KB body limit, 20 requests/minute per IP and a
+  30 s timeout, and filters any agent "patch" against a per-tool whitelist of editable fields.
+  If a live call fails, the UI says so and falls back to the labelled demo output.
+
+Money is never calculated by AI: quotation totals and spreadsheet statistics are plain JavaScript.
+
+## Routes
+
+| Route | What it is |
+| --- | --- |
+| `/` | Cinematic landing page (hero, pinned scroll transformation, professions, live AI mini-demo, ecosystem) |
+| `/demo` | Showcase mode: a 9-step guided tour for presenting live, with Restart |
+| `/login`, `/signup` | Demo authentication screens (local session only — not real auth) |
+| `/onboarding` | Five questions → a deterministic, explained workspace configuration |
+| `/app` | Personalized dashboard · `/app/tool/:id` tools · `/app/settings` |
+
+## What works
+
+- Quotation Builder — line items, discount, configurable tax, live totals, PDF export, save/reopen
+- Campaign Studio (AI content) — concept, post, ad copy, CTA, schedule; editable, copy, export, save
+- Spreadsheet Analyzer — CSV upload, preview, numeric detection, sum/avg/min/max, chart, summary export
+- Quiz Generator — MCQs with answers and explanations, interactive quiz mode with scoring
+- Embedded assistant — reads the open tool, proposes edits applied only after confirmation
+- The other 8 tools are registered **previews**: they show their planned inputs/outputs and say so
+
+## Limitations
+
+- PDF export uses the browser print dialog ("Save as PDF"), which gives correct Arabic shaping.
+- In Demo Mode the Quiz Generator uses fixed sample material; your own text needs Live AI.
+- Login is a local demo session. `src/lib/store.ts` exposes an `AuthAdapter` interface to swap for Supabase Auth.
+- All data lives in the browser's localStorage. "Reset demo" in Settings clears it.
+- UI primitives are hand-written in `src/components/ui.tsx` (shadcn-style) rather than generated by the shadcn CLI,
+  and the chart is a small built-in component, to keep dependencies minimal.
+
+## Professional Marketer (agent workspace)
+
+Marketing → **Professional Marketer** (`/app/tool/professional-marketer`): an autonomous marketing agent with
+eight composable skills, file intelligence (PDF, DOCX, XLSX, CSV, TXT, images), real web page research,
+exact metric calculation, editable deliverables with PDF export, and project memory in IndexedDB.
+Architecture and how to add a skill: [src/agents/marketing/README.md](./src/agents/marketing/README.md).
+
+## Professional Sales Employee (agent workspace)
+
+Sales → **Professional Sales Employee** (`/app/tool/sales-employee`): the same agent engine with a sales persona and
+14 composable skills (lead generation, import, qualification, account research, outreach, follow-ups, conversation
+intelligence, quotations, technical proposals, negotiation, closing, CRM & pipeline, sales analytics, competitor
+intelligence). Tabs: Agent, Skills, Outputs, CRM (pipeline board + table), Documents, Company profile, History.
+
+- Quotation math is done by the `build_quotation` tool: catalog prices always win, the discount can never exceed the
+  company's max-discount policy, tax comes from the profile.
+- Anything that would reach a customer goes through `draft_message`: the user edits and approves it, and it opens in
+  their own email/WhatsApp app (or is copied). SANDO never sends on its own.
+- The CRM, company profile, outputs and history are stored in the browser (localStorage) for this demo.
+- Exports for every deliverable (both agents): PDF, Word (.doc), PowerPoint (.pptx), Excel (.xlsx), CSV, Markdown.
+- File intake adds PPTX; legacy DOC/XLS/PPT are refused with a clear "save as DOCX/XLSX/PPTX" message.
+- Lead generation from the open web needs `BRAVE_API_KEY`; without it the agent works from your files and says so.
+
+Adding tools: see [TOOL_DEVELOPMENT_GUIDE.md](./TOOL_DEVELOPMENT_GUIDE.md).

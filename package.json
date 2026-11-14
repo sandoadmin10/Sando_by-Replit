@@ -1,0 +1,43 @@
+{
+  "name": "sando",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:server": "PORT=3001 node server/index.js",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "start": "node server/index.js",
+    "preview": "npm run build && npm start",
+    "start:claude": "node server/index.js --provider=claude-code",
+    "start:cursor": "node server/index.js --provider=cursor"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-code": "^2.1.323",
+    "jszip": "^3.10.2",
+    "lucide-react": "^1.72.0",
+    "mammoth": "^1.13.0",
+    "motion": "^14.14.0",
+    "pdfjs-dist": "^6.5.438",
+    "pptxgenjs": "^4.0.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-router-dom": "^7.18.5",
+    "read-excel-file": "^9.3.17",
+    "write-excel-file": "^4.1.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.5",
+    "@types/node": "^26.6.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "tailwindcss": "^4.3.5",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8"
+  }
+}
