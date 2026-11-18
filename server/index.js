@@ -156,7 +156,7 @@ async function callCursor(system, user, opts = {}) {
   } catch (e) {
     if (e.name === 'CancelError' || e.name === 'AbortError') throw e
     const msg = String(e.message || e).slice(0, 300)
-    throw new Error(CURSOR_AUTH.test(msg) ? 'Cursor API key is missing or invalid. Set CURSOR_API_KEY (Cursor Dashboard → Integrations) and restart the server.' : `Cursor error: ${msg}`)
+    throw new Error(CURSOR_AUTH.test(msg) ? 'Cursor API key is missing or invalid. Set CURSOR_API_KEY (Cursor Dashboard → API Keys) and restart the server.' : `Cursor error: ${msg}`)
   } finally {
     clearTimeout(timer); opts.signal?.removeEventListener('abort', onAbort)
     await agent?.[Symbol.asyncDispose]().catch(() => {})

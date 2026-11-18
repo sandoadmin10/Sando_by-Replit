@@ -50,7 +50,7 @@ Keys are read only by `server/index.js` and are never sent to the browser.
 
 ### Cursor (`CURSOR_API_KEY`)
 
-Create a key at [Cursor Dashboard → Integrations](https://cursor.com/dashboard/integrations) and add it as the
+Create a user API key in the [Cursor Dashboard](https://cursor.com/dashboard) under **API Keys** and add it as the
 `CURSOR_API_KEY` secret on the host (Replit: **Secrets**). Nothing else needs installing: the Cursor SDK comes with
 `npm install`. Requires Node 22.13+. The model answers with text only (no tools) inside an empty temp folder.
 Never commit the key; every run is billed to the account that owns it.
