@@ -23,12 +23,12 @@ const DIST = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'dist
 const PORT = Number(process.env.PORT) || 3000
 const env = process.env
 const PROVIDER = (env.AI_PROVIDER || (env.ANTHROPIC_API_KEY ? 'anthropic' : env.OPENAI_API_KEY ? 'openai' : env.CLAUDE_CODE_OAUTH_TOKEN ? 'claude-code' : env.CURSOR_API_KEY ? 'cursor' : '')).toLowerCase()
-const KEY = PROVIDER === 'anthropic' ? env.ANTHROPIC_API_KEY : PROVIDER === 'openai' ? env.OPENAI_API_KEY : ''
-const CURSOR = PROVIDER === 'cursor' // Cursor's agent CLI, signed in with `cursor-agent login` (or CURSOR_API_KEY)
-const CLI = PROVIDER === 'claude-code' || CURSOR // sign-in based: uses the Claude Code CLI's own login instead of an API key
-const MODEL = env.AI_MODEL || (PROVIDER === 'anthropic' ? 'claude-sonnet-5-5' : CLI ? 'default' : 'gpt-4o-mini')
+const KEY = PROVIDER === 'anthropic' ? env.ANTHROPIC_API_KEY : PROVIDER === 'openai' ? env.OPENAI_API_KEY : PROVIDER === 'cursor' ? env.CURSOR_API_KEY : ''
+const CURSOR = PROVIDER === 'cursor' // Cursor SDK (@cursor/sdk), installed with the project; needs CURSOR_API_KEY
+const CLI = PROVIDER === 'claude-code' // sign-in based: uses the Claude Code CLI's own login instead of an API key
+const MODEL = env.AI_MODEL || (PROVIDER === 'anthropic' ? 'claude-sonnet-5-5' : CURSOR ? 'composer-2.5' : CLI ? 'default' : 'gpt-4o-mini')
 const LIVE = Boolean(KEY) || CLI
-const TIMEOUT_MS = CLI ? 120000 : 30000, MAX_BODY = 32 * 1024, RATE = 20 // requests per minute per IP
+const TIMEOUT_MS = CLI || CURSOR ? 120000 : 30000, MAX_BODY = 32 * 1024, RATE = 20 // requests per minute per IP
 
 // ---------- provider adapter ----------
 // Prefer the CLI installed with the project (npm install), so hosts like Replit need no global install.
@@ -59,7 +59,7 @@ function claudeCandidates() {
   fromPackage(path.join(DIST, '..', 'node_modules')) // bundled with the project: last resort
   return out
 }
-const CLAUDE_CANDIDATES = CLI && !CURSOR ? claudeCandidates() : []
+const CLAUDE_CANDIDATES = CLI ? claudeCandidates() : []
 let claudeIndex = 0 // the candidate that last worked
 
 function classify(text) {
@@ -81,12 +81,11 @@ const CLI_MESSAGES = {
 function runCli(cand, mode, system, user, opts) {
   return new Promise((resolve, reject) => {
     let sysFile = ''
-    if (!CURSOR && mode === 'modern') { sysFile = path.join(os.tmpdir(), `sando-system-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.txt`); fs.writeFileSync(sysFile, system, 'utf8') }
+    if (mode === 'modern') { sysFile = path.join(os.tmpdir(), `sando-system-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.txt`); fs.writeFileSync(sysFile, system, 'utf8') }
     const cleanup = () => { if (sysFile) fs.rm(sysFile, { force: true }, () => {}) }
     const legacyPrompt = `${system}\n\n(Answer in text only. Do not use any tools.)\n\n${user}`
-    const args = CURSOR ? ['-p', `${system}\n\n${user}`, '--output-format', 'json']
-      : mode === 'modern' ? [...cand.pre, '-p', '--output-format', 'json', '--system-prompt-file', sysFile, '--tools', '', '--strict-mcp-config']
-        : [...cand.pre, '-p', '--output-format', 'json']
+    const args = mode === 'modern' ? [...cand.pre, '-p', '--output-format', 'json', '--system-prompt-file', sysFile, '--tools', '', '--strict-mcp-config']
+      : [...cand.pre, '-p', '--output-format', 'json']
     if (env.AI_MODEL) args.push('--model', env.AI_MODEL)
     const child = spawn(cand.bin, args, { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true })
     let out = '', err = '', settled = false
@@ -105,16 +104,12 @@ function runCli(cand, mode, system, user, opts) {
       const reason = (j ? [j.result, ...(Array.isArray(j.errors) ? j.errors : [])].filter(x => typeof x === 'string' && x).join(' — ') : '') || err.trim() || out.trim() || `exit code ${code}`
       fail(classify(reason), reason)
     })
-    child.stdin.end(CURSOR ? '' : mode === 'modern' ? user : legacyPrompt)
+    child.stdin.end(mode === 'modern' ? user : legacyPrompt)
   })
 }
 
 /** Tries the last working install first, then the others; falls back to legacy flags for older versions. */
 async function callClaudeCode(system, user, opts = {}) {
-  if (CURSOR) {
-    try { return await runCli({ bin: env.CURSOR_BIN || 'cursor-agent', pre: [] }, 'modern', system, user, opts) }
-    catch (e) { if (e.name === 'CancelError') throw e; throw new Error(e.kind === 'notfound' ? 'Cursor CLI not found. Install it and run: cursor-agent login' : `Cursor error: ${String(e.message).slice(0, 300)}`) }
-  }
   if (!CLAUDE_CANDIDATES.length) throw new Error(CLI_MESSAGES.notfound)
   const order = [claudeIndex, ...CLAUDE_CANDIDATES.keys()].filter((v, i, a) => a.indexOf(v) === i)
   const problems = []
@@ -139,9 +134,40 @@ async function callClaudeCode(system, user, opts = {}) {
   throw new Error(`${CLI_MESSAGES[main.kind] || 'Claude Code error.'} (${main.detail})`)
 }
 
+// ---------------------------------------------------------------- Cursor SDK (CURSOR_API_KEY)
+// Loaded on demand so the other providers keep working on older Node versions. tools: [] means the model can only
+// answer with text; it runs in an empty temp folder so it never sees or touches the project files.
+const CURSOR_AUTH = /unauthori[sz]ed|unauthenticated|invalid api key|api key|401|403/i
+async function callCursor(system, user, opts = {}) {
+  const { Agent } = await import('@cursor/sdk')
+  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sando-cursor-'))
+  let agent, run, timer, onAbort
+  try {
+    agent = await Agent.create({ apiKey: KEY, model: { id: MODEL }, tools: [], local: { cwd: workDir } })
+    run = await agent.send({ text: `${system}\n\n${user}`, images: (opts.images || []).map(i => ({ data: i.data, mimeType: i.mediaType })) })
+    const stopped = new Promise((_, reject) => {
+      timer = setTimeout(() => { run.cancel().catch(() => {}); reject(Object.assign(new Error('timeout'), { name: 'AbortError' })) }, opts.timeout || TIMEOUT_MS)
+      onAbort = () => { run.cancel().catch(() => {}); reject(Object.assign(new Error('cancelled'), { name: 'CancelError' })) }
+      if (opts.signal?.aborted) onAbort(); else opts.signal?.addEventListener('abort', onAbort, { once: true })
+    })
+    const result = await Promise.race([run.wait(), stopped])
+    if (result.status !== 'finished') throw new Error(result.error?.message || `run ${result.status}`)
+    return String(result.result ?? '')
+  } catch (e) {
+    if (e.name === 'CancelError' || e.name === 'AbortError') throw e
+    const msg = String(e.message || e).slice(0, 300)
+    throw new Error(CURSOR_AUTH.test(msg) ? 'Cursor API key is missing or invalid. Set CURSOR_API_KEY (Cursor Dashboard → Integrations) and restart the server.' : `Cursor error: ${msg}`)
+  } finally {
+    clearTimeout(timer); opts.signal?.removeEventListener('abort', onAbort)
+    await agent?.[Symbol.asyncDispose]().catch(() => {})
+    fs.rm(workDir, { recursive: true, force: true }, () => {})
+  }
+}
+
 /** opts: { signal, images: [{ mediaType, data(base64) }], maxTokens, timeout } */
 export async function callModel(system, user, opts = {}) {
   if (CLI) return callClaudeCode(system, user, opts)
+  if (CURSOR) return callCursor(system, user, opts)
   const ctl = new AbortController()
   const timer = setTimeout(() => ctl.abort(), opts.timeout || TIMEOUT_MS)
   opts.signal?.addEventListener('abort', () => ctl.abort(), { once: true })

@@ -14,10 +14,11 @@
     "start:cursor": "node server/index.js --provider=cursor"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22.13"
   },
   "dependencies": {
     "@anthropic-ai/claude-code": "^2.1.323",
+    "@cursor/sdk": "^1.4.1",
     "jszip": "^3.10.2",
     "lucide-react": "^1.72.0",
     "mammoth": "^1.13.0",

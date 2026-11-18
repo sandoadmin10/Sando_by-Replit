@@ -28,7 +28,7 @@ Other scripts: `npm run typecheck`, `npm run preview` (build + start).
 1. Push this folder to a GitHub repository (`git init && git add . && git commit -m "SANDO" && git push`).
 2. In Replit: **Create App → Import from GitHub**, pick the repository.
 3. Press **Run**. The included `.replit` runs `npm install && npm run build && npm start`.
-4. Optional, for Live AI: open **Secrets** and add the variables below, then press Run again.
+4. Optional, for Live AI: open **Secrets** and add the variables below (e.g. `CURSOR_API_KEY`), then press Run again.
 
 No Replit AI Agent or paid add-on is needed. The server reads `PORT` from the environment, binds
 `0.0.0.0`, serves `dist/`, falls back to `index.html` for client routes (refresh-safe), and exposes
@@ -38,14 +38,22 @@ No Replit AI Agent or paid add-on is needed. The server reads `PORT` from the en
 
 | Variable | Purpose |
 | --- | --- |
+| `CURSOR_API_KEY` | Enables Live AI through the Cursor SDK (`@cursor/sdk`, installed by `npm install`) |
 | `ANTHROPIC_API_KEY` | Enables Live AI through the Anthropic Messages API |
 | `OPENAI_API_KEY` | Enables Live AI through the OpenAI Chat Completions API |
-| `AI_PROVIDER` | `anthropic` or `openai`. Auto-detected from whichever key is set |
-| `AI_MODEL` | Model id. Defaults: `claude-sonnet-5-5` / `gpt-4o-mini` |
+| `AI_PROVIDER` | `cursor`, `anthropic` or `openai`. Auto-detected from whichever key is set |
+| `AI_MODEL` | Model id. Defaults: `composer-2.5` / `claude-sonnet-5-5` / `gpt-4o-mini` |
 | `BRAVE_API_KEY` | Optional: enables the Professional Marketer's `search_web` tool |
 | `PORT` | Server port (default 3000) |
 
 Keys are read only by `server/index.js` and are never sent to the browser.
+
+### Cursor (`CURSOR_API_KEY`)
+
+Create a key at [Cursor Dashboard → Integrations](https://cursor.com/dashboard/integrations) and add it as the
+`CURSOR_API_KEY` secret on the host (Replit: **Secrets**). Nothing else needs installing: the Cursor SDK comes with
+`npm install`. Requires Node 22.13+. The model answers with text only (no tools) inside an empty temp folder.
+Never commit the key; every run is billed to the account that owns it.
 
 ### Sign-in instead of an API key (`AI_PROVIDER=claude-code`)
 
